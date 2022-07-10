@@ -1,4 +1,4 @@
-import './style.css'
+import './index.css'
 
 import * as t3 from 'three';
 
