@@ -3,7 +3,6 @@ import './style.css'
 import * as t3 from 'three';
 
 import {OrbitControls} from 'three/examples/jsm/controls/OrbitControls';
-// import {OrbitControls} from 'three/examples/jsm/controls/';
 
 const scene = new t3.Scene();
 

@@ -7,6 +7,10 @@
   margin-top: 60px;
 }
 
+#bluePurpleText {
+  color:blueviolet;
+}
+
 canvas {
   position: fixed;
   top: 0;
