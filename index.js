@@ -1,9 +1,12 @@
 import './index.css'
 
-import * as t3 from "./node_modules/three";
+// import * as t3 from "./node_modules/three";
+// import * as t3 from "three";
 
-import { OrbitControls } from "./node_modules/three/examples/jsm/controls/OrbitControls";
-
+// require('three');
+// import 'three' from "./node_modules/three";
+import * as t3 from "https://cdn.skypack.dev/three@0.132.2";
+import { OrbitControls } from "https://cdn.skypack.dev/three@0.132.2/examples/jsm/controls/OrbitControls.js";
 
 
 const scene = new t3.Scene();
@@ -37,7 +40,7 @@ scene.add(lightHelper);
 const gridHelper = new t3.GridHelper(200, 50);
 scene.add(gridHelper);
 
-// const controls = new OrbitControls(camera, renderer.domElement);
+const controls = new OrbitControls(camera, renderer.domElement);
 
 const backgroundTexture = new t3.TextureLoader().load('images/cg420_1.PNG');
 scene.background = backgroundTexture;
@@ -49,7 +52,7 @@ function animate() {
   torus.rotation.y += 0.005;
   torus.rotation.z += 0.005;
 
-  // controls.update();
+  controls.update();
 
   renderer.render(scene, camera);
 }
