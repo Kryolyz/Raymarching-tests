@@ -60,7 +60,6 @@ float cone( vec3 p, vec2 c, vec3 pos, vec4 quat)
     return dot(c,vec2(q,pp.z));
 }
 
-//http://www.pouet.net/topic.php?post=365312
 float cylinder( vec3 p, float h, float r, vec3 pos, vec4 quat ) {
     mat3 transform = rotationMatrix3( quat.xyz, quat.w );
     vec3 pp = (p - pos ) * transform;
@@ -71,8 +70,12 @@ float cylinder( vec3 p, float h, float r, vec3 pos, vec4 quat ) {
 float sdf(vec3 p) {
     float sph = sphere(vec3(cos(0.01*time), sin(0.01*time), .5), 2.0f, p);
     vec4 quat = vec4( 1., sin( time ) *.01 , 0., time * .02 );
-    float rb = roundBox(p, vec3(2.0,1.0,2.0), 0.1, vec3(0.), quat + vec4( 1., 1., 1., PI / 4. ));
-    float val = intersectionAB(sph, rb);
+    float rb = roundBox(p, vec3(1.0,1.0,2.0), 0.1, vec3(0.), quat + vec4( 1., 1., 1., PI / 4. ));
+
+    float to0 = torus( p, vec2( 1.5,.9), vec3(0.), vec4( 1. + time * .01, 0. + time * .01, 0., 0. + time * .005 ) );
+
+    float val = unionAB(sph, to0);
+    val = intersectionAB(val, rb);
     return val;
 }
  
