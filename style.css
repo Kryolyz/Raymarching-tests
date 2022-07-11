@@ -11,6 +11,10 @@
   color:blueviolet;
 }
 
+#whiteText {
+  color: whitesmoke;
+}
+
 canvas {
   position: fixed;
   top: 0;

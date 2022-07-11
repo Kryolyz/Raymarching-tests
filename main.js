@@ -1,5 +1,10 @@
-import * as t3 from "https://cdn.skypack.dev/three@0.132.2";
-import { OrbitControls } from "https://cdn.skypack.dev/three@0.132.2/examples/jsm/controls/OrbitControls.js";
+// import * as t3 from "https://cdn.skypack.dev/three@0.132.2";
+import * as t3 from 'three';
+// import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { OrbitControls } from "https://unpkg.com/three@0.142.0/examples/jsm/controls/OrbitControls.js";
+
+import fragment from './shaders/fragment.js';
+import vertex from './shaders/vertex.js';
 
 const scene = new t3.Scene();
 
@@ -14,38 +19,33 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 
 camera.position.setZ(30);
 
-const geometry = new t3.TorusGeometry(10, 3, 16, 100)
-const material = new t3.MeshStandardMaterial( {color: 0xE400FF} );
-const torus = new t3.Mesh(geometry, material);
+function createMesh() {
+  const geometry = new t3.PlaneGeometry(2, 2);
+  const material = new t3.ShaderMaterial({
+    fragmentShader: fragment,
+    vertexShader: vertex,
+    uniforms:{
+      time:{type:"f", value:0},
+      resolution:{ type:"v2", value:new t3.Vector2( window.innerWidth, window.innerHeight) }}
+    , side: t3.DoubleSide});
+  const mesh = new t3.Mesh(geometry, material);
+  return mesh;
+}
 
-scene.add(torus);
+var time = 0;
 
-const pointLight = new t3.PointLight(0xffffff);
-pointLight.position.set(15,5,5);
-
-const ambientLight = new t3.AmbientLight(0x323232);
-scene.add(pointLight, ambientLight);
-
-const lightHelper = new t3.PointLightHelper(pointLight);
-scene.add(lightHelper);
-
-const gridHelper = new t3.GridHelper(200, 50);
-scene.add(gridHelper);
+var plane = createMesh();
+scene.add(plane);
 
 const controls = new OrbitControls(camera, renderer.domElement);
-
-const backgroundTexture = new t3.TextureLoader().load('images/cg420_1.PNG');
-scene.background = backgroundTexture;
 
 function animate() {
   requestAnimationFrame(animate);
 
-  torus.rotation.x += 0.01;
-  torus.rotation.y += 0.005;
-  torus.rotation.z += 0.005;
+  time++;
+  plane.material.uniforms.time.value = time;
 
   controls.update();
-
   renderer.render(scene, camera);
 }
 animate();
