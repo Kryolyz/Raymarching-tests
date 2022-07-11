@@ -11,6 +11,8 @@
     "vite": "^2.9.9"
   },
   "dependencies": {
-    "three": "^0.142.0"
+    "local-web-server": "^5.2.1",
+    "three": "^0.142.0",
+    "ws": "^8.8.0"
   }
 }
