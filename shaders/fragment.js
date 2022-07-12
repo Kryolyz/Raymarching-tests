@@ -1,27 +1,21 @@
 export default `
 uniform vec2 resolution;
 uniform float time;
+uniform mat4 cameraTransform;
 
-#define MIN_DIST 0.01
-#define NUM_STEPS 32
+#define MIN_DIST 0.02
+#define NUM_STEPS 64
 #define PI 3.14159
 
 // Helper functions from https://github.com/nicoptere/raymarching-for-THREE/blob/master/glsl/fragment.glsl
-float unionAB(float a, float b){return min(a, b);}
-float intersectionAB(float a, float b){return max(a, b);}
-float blendAB( float a, float b, float t ){ return mix(a, b, t );}
-float subtract(float a, float b){ return max(-a, b);}
+
+vec2 unionAB(vec2 a, vec2 b){ if(a.x < b.x) return a; else return b;}
+vec2 intersectionAB(vec2 a, vec2 b){return vec2(max(a.x, b.x),1.);}
+vec2 blendAB( vec2 a, vec2 b, float t ){ return vec2(mix(a.x, b.x, t ),mix(a.y, b.y, t ));}
+vec2 subtractAB(vec2 a, vec2 b){ return vec2(max(-a.x, b.x), a.y); }
 //http://iquilezles.org/www/articles/smin/smin.htm
-float smin( float a, float b, float k ) { float h = clamp( 0.5+0.5*(b-a)/k, 0.0, 1.0 ); return mix( b, a, h ) - k*h*(1.0-h); }
-
-mat3 calcLookAtMatrix(vec3 origin, vec3 target, float roll) {
-    vec3 rr = vec3(sin(roll), cos(roll), 0.0);
-    vec3 ww = normalize(target - origin);
-    vec3 uu = normalize(cross(ww, rr));
-    vec3 vv = normalize(cross(uu, ww));
-    return mat3(uu, vv, ww);
-}
-
+vec2 smin( vec2 a, vec2 b, float k ) { float h = clamp( 0.5+0.5*(b.x-a.x)/k, 0.0, 1.0 ); return vec2( mix( b.x, a.x, h ) - k*h*(1.0-h), 1. ); }
+ 
 mat3 rotationMatrix3(vec3 axis, float angle)
 {
     axis = normalize(axis);
@@ -33,50 +27,89 @@ mat3 rotationMatrix3(vec3 axis, float angle)
                 oc * axis.x * axis.y + axis.z * s,  oc * axis.y * axis.y + c,           oc * axis.y * axis.z - axis.x * s,
                 oc * axis.z * axis.x - axis.y * s,  oc * axis.y * axis.z + axis.x * s,  oc * axis.z * axis.z + c          );
 }
- 
-float sphere(vec3 position, float radius, vec3 evalPosition) {
-    return length(evalPosition - position) - radius;
-}
 
-float roundBox(vec3 p, vec3 size, float corner, vec3 pos, vec4 quat )
+vec2 sphere( vec3 p, float radius, vec3 pos, vec3 offset, vec4 quat)
 {
     mat3 transform = rotationMatrix3( quat.xyz, quat.w );
-    return length( max( abs( ( p-pos ) * transform )-size, 0.0 ) )-corner;
+    float d = length( ( (   p-pos) * transform ) - offset) - radius;
+    return vec2(d,1);
 }
 
-float torus( vec3 p, vec2 radii, vec3 pos, vec4 quat )
+vec2 roundBox(vec3 p, vec3 size, float corner, vec3 pos, vec3 offset, vec4 quat )
 {
     mat3 transform = rotationMatrix3( quat.xyz, quat.w );
-    vec3 pp = ( p - pos ) * transform;
-    float d = length( vec2( length( pp.xz ) - radii.x, pp.y ) ) - radii.y;
-    return d;
+    return vec2( length( max( abs( (( p-pos ) * transform) - offset)-size, 0.0 ) )-corner,1.);
 }
 
-float cone( vec3 p, vec2 c, vec3 pos, vec4 quat)
+vec2 torus( vec3 p, vec2 radii, vec3 pos, vec3 offset, vec4 quat )
 {
     mat3 transform = rotationMatrix3( quat.xyz, quat.w );
-    vec3 pp = ( p - pos ) * transform;
+    vec3 pp = ( p - pos ) * transform - offset;
+    float d = length( vec2( length( pp.xz ) - radii.x, pp.y) ) - radii.y;
+    return vec2(d,1.);
+}
+
+vec2 cone( vec3 p, vec2 c, vec3 pos, vec3 offset, vec4 quat  )
+{
+    mat3 transform = rotationMatrix3( quat.xyz, quat.w );
+    vec3 pp = ( p - pos ) * transform - offset;
     float q = length(pp.xy);
-    return dot(c,vec2(q,pp.z));
+    return vec2( dot(c,vec2(q,pp.z)), 1. );
 }
 
-float cylinder( vec3 p, float h, float r, vec3 pos, vec4 quat ) {
+vec2 cylinder( vec3 p, float h, float r, vec3 pos, vec3 offset, vec4 quat ) {
     mat3 transform = rotationMatrix3( quat.xyz, quat.w );
-    vec3 pp = (p - pos ) * transform;
-    return max(length(pp.xz)-r, abs(pp.y)-h);
+    vec3 pp = (p - pos ) * transform - offset;
+    return vec2( max(length(pp.xz)-r, abs(pp.y)-h),1. );
+}
+
+float rand (vec2 st) {
+    return fract(sin(dot(st.xy,
+                         vec2(12.9898,78.233)))*
+        43758.5453123);
 }
 
 // Total signed distance field
-float sdf(vec3 p) {
-    float sph = sphere(vec3(cos(0.01*time), sin(0.01*time), .5), 2.0f, p);
-    vec4 quat = vec4( 1., sin( time ) *.01 , 0., time * .02 );
-    float rb = roundBox(p, vec3(1.0,1.0,2.0), 0.1, vec3(0.), quat + vec4( 1., 1., 1., PI / 4. ));
+vec2 sdf(vec3 p) {
 
-    float to0 = torus( p, vec2( 1.5,.9), vec3(0.), vec4( 1. + time * .01, 0. + time * .01, 0., 0. + time * .005 ) );
+    // center object
+    vec3 pos = vec3(0., 4., -2.0);
+    vec4 quat = vec4( 1., 0. , 0., time*0.02 );
+    vec2 sp1 = sphere(p, 0.3, pos, vec3(0.), quat + vec4(0.));
+    vec2 ring1 = torus( p, vec2( 1.5,.1), pos, vec3(0.), vec4( 1., 0. , 0., time*0.02 ));
+    vec2 ring2 = torus( p, vec2( 1.8,.1), pos, vec3(0.), vec4( 0., 1. , 1., time*0.03 ));
+    vec2 ring3 = torus( p, vec2( 2.0,.1), pos, vec3(0.), vec4( 1., 0. , 1., time*0.01 ));
 
-    float val = unionAB(sph, to0);
-    val = intersectionAB(val, rb);
-    return val;
+    vec2 orbital = unionAB(sp1, ring1);
+    orbital = unionAB(orbital, ring2);
+    orbital = unionAB(orbital, ring3);
+
+    for (int i = 1; i < 11; ++i) {
+        vec3 offset = vec3(rand(vec2(float(i), float(i)*0.8)) - .5, rand(vec2(float(i)*3.2, float(i))) - .5, rand(vec2(float(i), float(i)*1.4)) - .5) * 5.;
+        vec2 orbiter = sphere(p, 0.1, pos, offset, vec4(rand(vec2(float(i), float(i)*0.8)) - .5, rand(vec2(float(i), float(i)*1.4)) - .5, rand(vec2(float(i)*3.2, float(i))) - .5, time*0.01));
+        orbital = unionAB(orbital, orbiter);
+    }
+
+    orbital.y = 0.1;
+
+    //cup
+    vec4 quat2 = vec4(1.0, 0., 0., 0.);
+    vec2 bot1 = cylinder(p, 3., 2., vec3(0.,0., 4.), vec3(0.), quat2);
+    vec2 handle = torus(p, vec2(1.5, .4), vec3(0., 0.7, 6.), vec3(0.), vec4(0.,0.,1., PI / 2.));
+    vec2 cup = unionAB(bot1, handle);
+    vec2 botsub = cylinder(p, 2.4, 1.8, vec3(0., 1.0, 4.), vec3(0.), quat2);
+    cup = subtractAB(botsub, cup);
+    cup.y = 0.2;
+
+    // ground
+    vec2 ground = roundBox(p, vec3(30.,1.,30.), 0.5, vec3(0., -3., 0.), vec3(0.), vec4(1., 0., 0., 0.));
+    ground.y = 0.;
+
+    // unionize everything to get one result
+    vec2 result = unionAB(orbital, ground);
+    result = unionAB(result, cup);
+
+    return result;
 }
  
 vec3 calcNormal(vec3 pos, float eps) {
@@ -86,13 +119,38 @@ vec3 calcNormal(vec3 pos, float eps) {
     const vec3 v4 = vec3( 1.0, 1.0, 1.0);
   
     return normalize(
-    v1 * sdf( pos + v1*eps ) +
-    v2 * sdf( pos + v2*eps ) +
-    v3 * sdf( pos + v3*eps ) +
-    v4 * sdf( pos + v4*eps ) );
+    v1 * sdf( pos + v1*eps ).x +
+    v2 * sdf( pos + v2*eps ).x +
+    v3 * sdf( pos + v3*eps ).x +
+    v4 * sdf( pos + v4*eps ).x );
 }  
 vec3 calcNormal(vec3 pos) {
     return calcNormal(pos, 0.002);
+}
+
+vec3 getCamPosition() {
+    return vec3(cameraTransform[3][0], cameraTransform[3][1], cameraTransform[3][2]);
+}
+mat3 getCamRotationMat() {
+    mat3 rot = mat3(0.);
+    for (int x = 0; x < 3; ++x) {
+        for (int y = 0; y < 3; ++y) {
+            rot[x][y] = cameraTransform[x][y];
+        }
+    }
+    return rot;
+}
+
+vec3 getMaterial(vec2 a, vec3 normal, vec3 position) {
+    if (a.y == 0.)
+        return vec3((cos(position.x * PI / 2.) + cos(position.z * PI / 2.)) * (cos(position.x * PI / 2.) + cos(position.z * PI / 2.)));
+    if (a.y == 0.1) {
+        return normal;
+    }
+    if (a.y == 0.2) {
+        return normal;
+    }
+    return vec3(0.);
 }
 
 void main( void ) {
@@ -103,8 +161,12 @@ void main( void ) {
  
  
     // set camera position and direction
-	vec3 pos = vec3( 0.,0.,-6.);
-	vec3 dir = normalize( vec3( uv, 1. ) );
+	// vec3 pos = vec3( 0.,0.,-6.);
+	// vec3 dir = normalize( vec3( uv, 1. ) );
+
+	vec3 pos = getCamPosition();
+    mat3 cameraRot = getCamRotationMat();
+	vec3 dir = cameraRot * normalize( vec3( uv, - 1. ) );
  
  
     // raymarching loop
@@ -113,7 +175,7 @@ void main( void ) {
  
 	//variable step size
 	float dx = 0.0;
-    float temp = 1.0/0.0; // Yes, intentionally initialize to infinity
+    vec2 temp = vec2(1000000.0,0.); // Yes, intentionally initialize to infinity
 	for( int i = 0; i < NUM_STEPS; i++) {
  
         //update position along path
@@ -124,24 +186,26 @@ void main( void ) {
  
         //break the loop if the distance was too small
         //this means that we are close enough to the surface
-		if( temp < MIN_DIST ) break;
+		if( temp.x < MIN_DIST || temp.x > 500.) break;
  
 		//increment the step along the ray path
-		dx += temp;
+		dx += temp.x;
 	}
     
     // calc normals
     vec3 normal = calcNormal(currentPosition.xyz);
-    vec3 rgb = normal;
+
+    // Assign material
+    vec3 rgb = getMaterial(temp, normal, currentPosition);
 
     // Fix bugs and do background
-    if (temp > (MIN_DIST+0.001) || dot(dir, normal) > 0.0f )
+    if (temp.x > (MIN_DIST+0.001) || dot(dir, normal) > 0.0f )
     {
-        vec3 col = vec3(dir.y*0.8+0.5, 0., 0.);
+        vec3 col = vec3(dir.y*0.8+0.5, dir.y*0.8+0.5, 1.);
         rgb = col;
     }
 
 
-	gl_FragColor = vec4(rgb, 1.0);
+	gl_FragColor = vec4(rgb, 1.);
 }
 `;
