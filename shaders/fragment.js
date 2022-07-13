@@ -2,6 +2,7 @@ export default `
 uniform vec2 resolution;
 uniform float time;
 uniform mat4 cameraTransform;
+uniform vec3 lightPosition;
 
 #define MIN_DIST 0.02
 #define NUM_STEPS 64
@@ -141,6 +142,48 @@ mat3 getCamRotationMat() {
     return rot;
 }
 
+vec3 rayMarch(vec3 pos, vec3 dir) {
+	vec3 currentPosition;
+    float dx = MIN_DIST;
+    vec2 temp = vec2(1000000.0,0.); // intentionally initialize to huge number
+	for( int i = 0; i < NUM_STEPS; i++) {
+ 
+        //update position along path
+        currentPosition = pos + dir * dx;
+ 
+        //gets the shortest distance to the scene
+		temp = sdf( currentPosition );
+ 
+        //break the loop if the distance was too small
+        //this means that we are close enough to the surface
+		if( temp.x < MIN_DIST || temp.x > 500.) break;
+ 
+		//increment the step along the ray path
+		dx += temp.x;
+	}
+    return currentPosition;
+}
+
+float getLight(vec3 position) {
+    vec3 normal = calcNormal(position);
+    vec3 dir = normalize(lightPosition - position);
+
+    return clamp(dot(normal, dir), 0., 1.);
+}
+
+float getShadows(vec3 position) {
+    vec3 dir = normalize(lightPosition - position);
+    vec3 finalPosition = rayMarch(position+calcNormal(position)*MIN_DIST*3., dir);
+
+    vec2 val = sdf(finalPosition);
+
+    if (val.x < MIN_DIST) {
+        return 0.2;
+    }
+
+    return 1.;
+}
+
 vec3 getMaterial(vec2 a, vec3 normal, vec3 position) {
     if (a.y == 0.)
         return vec3((cos(position.x * PI / 2.) + cos(position.z * PI / 2.)) * (cos(position.x * PI / 2.) + cos(position.z * PI / 2.)));
@@ -161,45 +204,26 @@ void main( void ) {
  
  
     // set camera position and direction
-	// vec3 pos = vec3( 0.,0.,-6.);
-	// vec3 dir = normalize( vec3( uv, 1. ) );
 
 	vec3 pos = getCamPosition();
     mat3 cameraRot = getCamRotationMat();
-	vec3 dir = cameraRot * normalize( vec3( uv, - 1. ) );
+	vec3 dir = cameraRot * normalize( vec3( uv, -1. ) );
  
- 
-    // raymarching loop
-    // Position of the ray during marching
-	vec3 currentPosition;
- 
-	//variable step size
-	float dx = 0.0;
-    vec2 temp = vec2(1000000.0,0.); // Yes, intentionally initialize to infinity
-	for( int i = 0; i < NUM_STEPS; i++) {
- 
-        //update position along path
-        currentPosition = pos + dir * dx;
- 
-        //gets the shortest distance to the scene
-		temp = sdf( currentPosition );
- 
-        //break the loop if the distance was too small
-        //this means that we are close enough to the surface
-		if( temp.x < MIN_DIST || temp.x > 500.) break;
- 
-		//increment the step along the ray path
-		dx += temp.x;
-	}
+    // raymarch
+	vec3 finalPosition = rayMarch(pos, dir);
+    vec2 val = sdf(finalPosition);
     
     // calc normals
-    vec3 normal = calcNormal(currentPosition.xyz);
+    vec3 normal = calcNormal(finalPosition.xyz);
 
     // Assign material
-    vec3 rgb = getMaterial(temp, normal, currentPosition);
+    vec3 rgb = getMaterial(val, normal, finalPosition);
+
+    rgb *= getLight(finalPosition);
+    rgb *= getShadows(finalPosition);
 
     // Fix bugs and do background
-    if (temp.x > (MIN_DIST+0.001) || dot(dir, normal) > 0.0f )
+    if (val.x > (MIN_DIST+0.001) || dot(dir, normal) > 0.0f )
     {
         vec3 col = vec3(dir.y*0.8+0.5, dir.y*0.8+0.5, 1.);
         rgb = col;

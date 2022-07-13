@@ -1,15 +1,11 @@
-// import * as t3 from "https://cdn.skypack.dev/three@0.132.2";
 import * as t3 from 'three';
-// import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { OrbitControls } from "https://unpkg.com/three@0.142.0/examples/jsm/controls/OrbitControls.js";
-import { FirstPersonControls } from "https://unpkg.com/three@0.142.0/examples/jsm/controls/FirstPersonControls.js";
+import { OrbitControls, MapControls } from 'OrbitControls';
 
 import fragment from './shaders/fragment.js';
 import vertex from './shaders/vertex.js';
-import { Matrix3, Vector3 } from 'three';
+import { Vector3 } from 'three';
 
 const scene = new t3.Scene();
-
 const camera = new t3.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 
 const renderer = new t3.WebGLRenderer( {
@@ -20,12 +16,9 @@ renderer.setPixelRatio(window.devicePixelRatio);
 renderer.setSize(window.innerWidth, window.innerHeight);
 
 const controls = new OrbitControls(camera, renderer.domElement);
-// const controls = new FirstPersonControls(camera, renderer.domElement);
-// controls.lookSpeed = 0.1;
-// controls.movementSpeed = 5.0;
 
-camera.position.setX(10);
-// controls.lookAt(0.,0.,0.);
+camera.position.setX(20);
+camera.position.setY(10);
 
 function createMesh() {
   const geometry = new t3.PlaneGeometry(2, 2);
@@ -35,7 +28,8 @@ function createMesh() {
     uniforms:{
       time:{type:"f", value:0},
       resolution:{ type:"v2", value:new t3.Vector2( window.innerWidth, window.innerHeight) },
-      cameraTransform:{type:"mat4", value: camera.matrixWorld}
+      cameraTransform:{type:"mat4", value: camera.matrixWorld},
+      lightPosition:{type:"vec3", value: new Vector3(3., 10., 8.)}
             }
     , side: t3.DoubleSide});
   const mesh = new t3.Mesh(geometry, material);
@@ -55,6 +49,7 @@ function animate() {
   time++;
   plane.material.uniforms.time.value = time;
   plane.material.uniforms.cameraTransform.value = camera.matrixWorld;
+  plane.material.uniforms.lightPosition.value = new Vector3(8. * Math.cos(time*0.002), 10., 18. * Math.sin(time*0.002))
 
   renderer.render(scene, camera);
 }
