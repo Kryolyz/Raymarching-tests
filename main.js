@@ -29,7 +29,7 @@ function createMesh() {
       time:{type:"f", value:0},
       resolution:{ type:"v2", value:new t3.Vector2( window.innerWidth, window.innerHeight) },
       cameraTransform:{type:"mat4", value: camera.matrixWorld},
-      lightPosition:{type:"vec3", value: new Vector3(3., 10., 8.)}
+      lightPosition:{type:"vec3", value: new Vector3(5., 5., 5.)}
             }
     , side: t3.DoubleSide});
   const mesh = new t3.Mesh(geometry, material);
@@ -49,7 +49,7 @@ function animate() {
   time++;
   plane.material.uniforms.time.value = time;
   plane.material.uniforms.cameraTransform.value = camera.matrixWorld;
-  plane.material.uniforms.lightPosition.value = new Vector3(8. * Math.cos(time*0.002), 10., 18. * Math.sin(time*0.002))
+  plane.material.uniforms.lightPosition.value = new Vector3(18. * Math.cos(time*0.002), 20., 18. * Math.sin(time*0.002))
 
   renderer.render(scene, camera);
 }

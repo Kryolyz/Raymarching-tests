@@ -5,8 +5,10 @@ uniform mat4 cameraTransform;
 uniform vec3 lightPosition;
 
 #define MIN_DIST 0.02
-#define NUM_STEPS 64
+#define NUM_STEPS 64+32
 #define PI 3.14159
+
+#define SHADOW_SOFTNESS 20.0
 
 // Helper functions from https://github.com/nicoptere/raymarching-for-THREE/blob/master/glsl/fragment.glsl
 
@@ -74,41 +76,31 @@ float rand (vec2 st) {
 vec2 sdf(vec3 p) {
 
     // center object
-    vec3 pos = vec3(0., 4., -2.0);
+    vec3 pos = vec3(0., 4., 0.0);
     vec4 quat = vec4( 1., 0. , 0., time*0.02 );
-    vec2 sp1 = sphere(p, 0.3, pos, vec3(0.), quat + vec4(0.));
-    vec2 ring1 = torus( p, vec2( 1.5,.1), pos, vec3(0.), vec4( 1., 0. , 0., time*0.02 ));
-    vec2 ring2 = torus( p, vec2( 1.8,.1), pos, vec3(0.), vec4( 0., 1. , 1., time*0.03 ));
-    vec2 ring3 = torus( p, vec2( 2.0,.1), pos, vec3(0.), vec4( 1., 0. , 1., time*0.01 ));
+    vec2 sp1 = sphere(p, 0.6, pos, vec3(0.), quat + vec4(0.));
+    vec2 ring1 = torus( p, vec2( 2.5,.1), pos, vec3(0.), vec4( 1., 0. , 0., time*0.02 ));
+    vec2 ring2 = torus( p, vec2( 3.0,.1), pos, vec3(0.), vec4( 0., 1. , 1., time*0.03 ));
+    vec2 ring3 = torus( p, vec2( 4.0,.1), pos, vec3(0.), vec4( 1., 0. , 1., time*0.01 ));
 
     vec2 orbital = unionAB(sp1, ring1);
     orbital = unionAB(orbital, ring2);
     orbital = unionAB(orbital, ring3);
 
     for (int i = 1; i < 11; ++i) {
-        vec3 offset = vec3(rand(vec2(float(i), float(i)*0.8)) - .5, rand(vec2(float(i)*3.2, float(i))) - .5, rand(vec2(float(i), float(i)*1.4)) - .5) * 5.;
-        vec2 orbiter = sphere(p, 0.1, pos, offset, vec4(rand(vec2(float(i), float(i)*0.8)) - .5, rand(vec2(float(i), float(i)*1.4)) - .5, rand(vec2(float(i)*3.2, float(i))) - .5, time*0.01));
+        vec3 offset = 3.0 * vec3(rand(vec2(float(i), float(i)*0.8)) - .5, rand(vec2(float(i)*3.2, float(i))) - .5, rand(vec2(float(i), float(i)*1.4)) - .5) * 5.;
+        vec2 orbiter = sphere(p, 0.2, pos, offset, vec4(rand(vec2(float(i), float(i)*0.8)) - .5, rand(vec2(float(i), float(i)*1.4)) - .5, rand(vec2(float(i)*3.2, float(i))) - .5, time*0.01));
         orbital = unionAB(orbital, orbiter);
     }
 
     orbital.y = 0.1;
 
-    //cup
-    vec4 quat2 = vec4(1.0, 0., 0., 0.);
-    vec2 bot1 = cylinder(p, 3., 2., vec3(0.,0., 4.), vec3(0.), quat2);
-    vec2 handle = torus(p, vec2(1.5, .4), vec3(0., 0.7, 6.), vec3(0.), vec4(0.,0.,1., PI / 2.));
-    vec2 cup = unionAB(bot1, handle);
-    vec2 botsub = cylinder(p, 2.4, 1.8, vec3(0., 1.0, 4.), vec3(0.), quat2);
-    cup = subtractAB(botsub, cup);
-    cup.y = 0.2;
-
     // ground
-    vec2 ground = roundBox(p, vec3(30.,1.,30.), 0.5, vec3(0., -3., 0.), vec3(0.), vec4(1., 0., 0., 0.));
+    vec2 ground = roundBox(p, vec3(30.,1.,30.), 0.5, vec3(0., -5., 0.), vec3(0.), vec4(1., 0., 0., 0.));
     ground.y = 0.;
 
     // unionize everything to get one result
     vec2 result = unionAB(orbital, ground);
-    result = unionAB(result, cup);
 
     return result;
 }
@@ -142,9 +134,10 @@ mat3 getCamRotationMat() {
     return rot;
 }
 
-vec3 rayMarch(vec3 pos, vec3 dir) {
+vec4 rayMarch(vec3 pos, vec3 dir, bool light) {
 	vec3 currentPosition;
     float dx = MIN_DIST;
+    float closestPoint = 1.;
     vec2 temp = vec2(1000000.0,0.); // intentionally initialize to huge number
 	for( int i = 0; i < NUM_STEPS; i++) {
  
@@ -153,15 +146,24 @@ vec3 rayMarch(vec3 pos, vec3 dir) {
  
         //gets the shortest distance to the scene
 		temp = sdf( currentPosition );
+        if (light) {
+            vec2 lightSDF = sphere(currentPosition, 0.1, lightPosition, vec3(0.), vec4(1.,0.,0.,0.));
+            if (lightSDF.x < temp.x) temp = lightSDF;
+            else 
+            closestPoint = min(closestPoint, SHADOW_SOFTNESS * temp.x / dx);
+        }
  
         //break the loop if the distance was too small
         //this means that we are close enough to the surface
 		if( temp.x < MIN_DIST || temp.x > 500.) break;
+
+        // if(light && length(currentPosition - lightPosition) < 4.0) break;
  
 		//increment the step along the ray path
 		dx += temp.x;
+        
 	}
-    return currentPosition;
+    return vec4(currentPosition, closestPoint);
 }
 
 float getLight(vec3 position) {
@@ -173,20 +175,14 @@ float getLight(vec3 position) {
 
 float getShadows(vec3 position) {
     vec3 dir = normalize(lightPosition - position);
-    vec3 finalPosition = rayMarch(position+calcNormal(position)*MIN_DIST*3., dir);
-
-    vec2 val = sdf(finalPosition);
-
-    if (val.x < MIN_DIST) {
-        return 0.2;
-    }
-
-    return 1.;
+    vec4 finalPosition = rayMarch(position+calcNormal(position)*MIN_DIST*2., dir, true);
+    return finalPosition.w;
 }
 
 vec3 getMaterial(vec2 a, vec3 normal, vec3 position) {
     if (a.y == 0.)
-        return vec3((cos(position.x * PI / 2.) + cos(position.z * PI / 2.)) * (cos(position.x * PI / 2.) + cos(position.z * PI / 2.)));
+    //         return vec3((cos(position.x * PI / 2.) + cos(position.z * PI / 2.)) * (cos(position.x * PI / 2.) + cos(position.z * PI / 2.)) / 3.0);
+        return vec3(0.5);
     if (a.y == 0.1) {
         return normal;
     }
@@ -210,7 +206,8 @@ void main( void ) {
 	vec3 dir = cameraRot * normalize( vec3( uv, -1. ) );
  
     // raymarch
-	vec3 finalPosition = rayMarch(pos, dir);
+	vec4 final = rayMarch(pos, dir, false);
+    vec3 finalPosition = final.xyz;
     vec2 val = sdf(finalPosition);
     
     // calc normals
@@ -223,11 +220,12 @@ void main( void ) {
     rgb *= getShadows(finalPosition);
 
     // Fix bugs and do background
-    if (val.x > (MIN_DIST+0.001) || dot(dir, normal) > 0.0f )
+    if (val.x > (5.) || dot(dir, normal) >= 0.0f )
     {
         vec3 col = vec3(dir.y*0.8+0.5, dir.y*0.8+0.5, 1.);
         rgb = col;
     }
+
 
 
 	gl_FragColor = vec4(rgb, 1.);
