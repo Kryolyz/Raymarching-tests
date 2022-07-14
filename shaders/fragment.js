@@ -5,7 +5,7 @@ uniform mat4 cameraTransform;
 uniform vec3 lightPosition;
 
 #define MIN_DIST 0.001
-#define NUM_STEPS 64
+#define NUM_STEPS 100
 #define SHADOW_STEPS 64
 #define PI 3.14159
 
@@ -73,11 +73,8 @@ float rand (vec2 st) {
         43758.5453123);
 }
 
-// Total signed distance field
-vec2 sdf(vec3 p) {
-
+vec2 orbitObject(vec3 p, vec3 pos) {
     // center object
-    vec3 pos = vec3(0., 3., 0.0);
     vec4 quat = vec4( 1., 0. , 0., time*0.02 );
     vec2 sp1 = sphere(p, 0.6, pos, vec3(0.), quat + vec4(0.));
     vec2 ring1 = torus( p, vec2( 2.5,.1), pos, vec3(0.), vec4( 1., 0. , 0., time*0.02 ));
@@ -94,19 +91,34 @@ vec2 sdf(vec3 p) {
         orbital = unionAB(orbital, orbiter);
     }
 
+    return orbital;
+}
+
+// Total signed distance field
+vec2 sdf(vec3 p) {
+
+    // sphere with orbits
+    vec3 pos = vec3(0., 3., 0.0);
+    vec2 orbital = orbitObject(p, pos);
     orbital.y = 0.1;
 
     // ground
-    vec2 ground = roundBox(p, vec3(45.,1.,45.), 0.5, vec3(0., -5., 0.), vec3(0.), vec4(1., 0., 0., 0.));
+    vec2 ground = roundBox(p, vec3(45.,1.,45.), 0.5, vec3(0., 0., 0.), vec3(0.), vec4(1., 0., 0., 0.));
     ground.y = 0.;
 
-    vec2 box = roundBox(p, vec3(1., 2. + 2.*cos(time*0.01), 1.), 0., vec3(0., 0., 15.), vec3(0.), vec4(1., 0., 0., 0.));
+    vec3 boxPosition = vec3(0., 5. + 2. * cos(time * 0.01), 15.);
+    float scale = mix(1., 2., smoothstep(2., 7., p.y));
+    vec3 size = vec3(2., 3. , 2.);
+    p.xz *= scale;
+    boxPosition.xz *= scale;
+    vec2 box = roundBox(p, size, 1., boxPosition, vec3(0.), vec4(1., 0., 0., 0.)) / (1.5*scale);
     box.y = 0.0;
 
     // unionize everything to get one result
     // vec2 result = unionAB(orbital, ground);
     vec2 result = smin(orbital, ground, 1.);
-    result = unionAB(result, box);
+    // result = unionAB(result, box);
+    result = smin(result, box, 1.);
 
     return result;
 }
@@ -124,7 +136,7 @@ vec3 calcNormal(vec3 pos, float eps) {
     v4 * sdf( pos + v4*eps ).x );
 }  
 vec3 calcNormal(vec3 pos) {
-    return calcNormal(pos, 0.002);
+    return calcNormal(pos, 0.001);
 }
 
 vec3 getCamPosition() {
@@ -172,10 +184,11 @@ float getLight(vec3 position) {
     return clamp(dot(normal, dir), 0., 1.);
 }
 
-// Sexy shadows by iq
+// Sexy shadows by iq + improvement by sebastian aaltonen
 float getShadows(vec3 origin) {
     vec2 dist;
     float result = 1.0;
+    float ph = 1e20;
     float lightDist = length(lightPosition - origin);
 
     vec3 dir = normalize(lightPosition - origin);
@@ -184,30 +197,37 @@ float getShadows(vec3 origin) {
 
     for (int i = 0; i < SHADOW_STEPS; ++i) {
         dist = sdf(pos);
+
         if (dist.x < MIN_DIST) 
             return 0.0;
 
         if (length(pos - origin) > lightDist) 
             return result;
 
+        if (length(pos-origin) < lightDist) {
+            float y = dist.x*dist.x / (2. * ph);
+            float d = sqrt(dist.x*dist.x - y*y);
+            // result = min(result, SHADOW_SOFTNESS * dist.x / length(pos-origin));
+            result = min(result, SHADOW_SOFTNESS * d / max(0., length(pos-origin) - y));
+            ph = dist.x;
+        }
         pos+=dir*dist.x;
-        if (length(pos-origin) < lightDist) 
-            result = min(result, SHADOW_SOFTNESS * dist.x / length(pos-origin));
+            
     }
     return result;
 }
 
 vec3 getMaterial(vec2 a, vec3 normal, vec3 position) {
-    if (a.y == 0.)
+    if (a.y < 0.1)
     //         return vec3((cos(position.x * PI / 2.) + cos(position.z * PI / 2.)) * (cos(position.x * PI / 2.) + cos(position.z * PI / 2.)) / 3.0);
-        return vec3(0.5);
+        return mix(vec3(0.5), normal, 10.*a.y);
     if (a.y == 0.1) {
         return normal;
     }
     if (a.y == 0.2) {
         return normal;
     }
-    return vec3(0.);
+    return vec3(1.);
 }
 
 void main( void ) {
