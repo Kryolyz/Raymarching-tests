@@ -15,9 +15,10 @@ class Controller {
         
 		this.Arrowkeys = { LEFT: 'ArrowLeft', UP: 'ArrowUp', RIGHT: 'ArrowRight', BOTTOM: 'ArrowDown' };
         this.WASD = { LEFT: 'a', UP: 'w', RIGHT: 'd', BOTTOM: 's' };
-        MOUSE.
+        
 		this.mouseButtons = { LEFT: MOUSE.LEFT, MIDDLE: MOUSE.MIDDLE, RIGHT: MOUSE.RIGHT };
 
+        return this;
     }
 
     function onMouseDown( event ) {

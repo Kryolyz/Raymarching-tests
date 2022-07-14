@@ -1,5 +1,5 @@
 import * as t3 from 'three';
-import { OrbitControls, MapControls } from 'OrbitControls';
+import { OrbitControls } from 'OrbitControls';
 
 import fragment from './shaders/fragment.js';
 import vertex from './shaders/vertex.js';
