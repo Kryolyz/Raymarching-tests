@@ -41,16 +41,19 @@ var plane = createMesh();
 scene.add(plane);
 
 camera.matrixAutoUpdate = true;
-
+const fps = 60;
 function animate() {
-  requestAnimationFrame(animate);
   controls.update();
 
   time++;
   plane.material.uniforms.time.value = time;
   plane.material.uniforms.cameraTransform.value = camera.matrixWorld;
-  plane.material.uniforms.lightPosition.value = new Vector3(18. * Math.cos(time*0.002), 20., 18. * Math.sin(time*0.002))
+  plane.material.uniforms.lightPosition.value = new Vector3(25. * Math.cos(time*0.002), 30., 25. * Math.sin(time*0.002))
 
   renderer.render(scene, camera);
+  setTimeout(() => {
+    requestAnimationFrame(animate);
+  }, 1000 / fps);
 }
+  
 animate();

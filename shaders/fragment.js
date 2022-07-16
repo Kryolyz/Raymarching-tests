@@ -103,8 +103,8 @@ vec2 sdf(vec3 p) {
     orbital.y = 0.1;
 
     // ground
-    vec2 ground = roundBox(p, vec3(45.,1.,45.), 0.5, vec3(0., 0., 0.), vec3(0.), vec4(1., 0., 0., 0.));
-    ground.y = 0.;
+    vec2 ground = vec2(p.y, 0.);
+    // ground.y = 0.;
 
     vec3 boxPosition = vec3(0., 6. + 3. * cos(time * 0.01), 15.);
     float scale = mix(1., 2., smoothstep(2., 7., p.y));
