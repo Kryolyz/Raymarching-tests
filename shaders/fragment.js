@@ -5,8 +5,8 @@ uniform mat4 cameraTransform;
 uniform vec3 lightPosition;
 
 #define MIN_DIST 0.001
-#define NUM_STEPS 100
-#define SHADOW_STEPS 64
+#define NUM_STEPS 64
+#define SHADOW_STEPS 32
 #define PI 3.14159
 
 #define SHADOW_SOFTNESS 40.0
@@ -106,19 +106,19 @@ vec2 sdf(vec3 p) {
     vec2 ground = roundBox(p, vec3(45.,1.,45.), 0.5, vec3(0., 0., 0.), vec3(0.), vec4(1., 0., 0., 0.));
     ground.y = 0.;
 
-    vec3 boxPosition = vec3(0., 5. + 2. * cos(time * 0.01), 15.);
+    vec3 boxPosition = vec3(0., 6. + 3. * cos(time * 0.01), 15.);
     float scale = mix(1., 2., smoothstep(2., 7., p.y));
     vec3 size = vec3(2., 3. , 2.);
     p.xz *= scale;
     boxPosition.xz *= scale;
-    vec2 box = roundBox(p, size, 1., boxPosition, vec3(0.), vec4(1., 0., 0., 0.)) / (1.5*scale);
+    vec2 box = roundBox(p, size, .5, boxPosition, vec3(0.), vec4(1., 0., 0., 0.)) / scale;
     box.y = 0.0;
 
     // unionize everything to get one result
     // vec2 result = unionAB(orbital, ground);
     vec2 result = smin(orbital, ground, 1.);
     // result = unionAB(result, box);
-    result = smin(result, box, 1.);
+    result = smin(result, box, 0.0);
 
     return result;
 }
@@ -167,7 +167,7 @@ vec3 rayMarch(vec3 pos, vec3 dir, bool light) {
  
         //break the loop if the distance was too small
         //this means that we are close enough to the surface
-		if( temp.x < MIN_DIST || temp.x > 500.) break;
+		if( abs(temp.x) < MIN_DIST || temp.x > 500.) break;
 
         // if(light && length(currentPosition - lightPosition) < 4.0) break;
  
@@ -257,7 +257,7 @@ void main( void ) {
     rgb *= getShadows(final);
 
     // Fix bugs and do background
-    if (val.x > (5.) || dot(dir, normal) >= 0.0f )
+    if (val.x > 10.)
     {
         vec3 col = vec3(dir.y*0.8+0.5, dir.y*0.8+0.5, 1.);
         rgb = col;
