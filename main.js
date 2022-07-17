@@ -48,8 +48,11 @@ function animate() {
   time++;
   plane.material.uniforms.time.value = time;
   plane.material.uniforms.cameraTransform.value = camera.matrixWorld;
-  plane.material.uniforms.lightPosition.value = new Vector3(25. * Math.cos(time*0.002), 30., 25. * Math.sin(time*0.002))
+  plane.material.uniforms.lightPosition.value = new Vector3(35. * Math.cos(time*0.005), 35., 35. * Math.sin(time*0.005))
 
+  if (Math.cos(time * 0.005) == 1) {
+    time = 0;
+  }
   renderer.render(scene, camera);
   setTimeout(() => {
     requestAnimationFrame(animate);
