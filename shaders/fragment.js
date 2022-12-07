@@ -4,13 +4,13 @@ uniform float time;
 uniform mat4 cameraTransform;
 uniform vec3 lightPosition;
 
-#define MIN_DIST 0.001
-#define NUM_STEPS 64
+#define MIN_DIST 0.01
+#define NUM_STEPS 128
 #define SHADOW_STEPS 64
-#define FAR_DIST 50.
+#define FAR_DIST 60.
 #define PI 3.14159
 
-#define SHADOW_SOFTNESS 40.0
+#define SHADOW_SOFTNESS 20.0
 
 // Helper functions from https://github.com/nicoptere/raymarching-for-THREE/blob/master/glsl/fragment.glsl
 
@@ -105,53 +105,29 @@ vec2 orbitObject(vec3 p, vec3 pos) {
 vec2 sdf(vec3 p, bool light) {
     vec2 res = vec2(1e20, 0.);
 
+
     // sphere with orbits
-    vec3 pos = vec3(0., 3., 0.0);
-    if ( res.x > boundingBox(p, pos, vec3(5.,5.,5.)) )
-    {
-        res = orbitObject(p, pos);
-        res.y = 0.1;
-    }
-
-    // ground
-    vec2 ground = vec2(p.y, 0.);
+    vec3 pos = vec3(15. * cos(time * 0.03), 5. * sin(time * 0.01), 15. * sin(time * 0.03));
+    res = orbitObject(p, pos);
+    res.y = 0.1;
+    
+    // ground cylinder
+    vec2 ground = cylinder(p,  5., 30., vec3(0.,0.,0.), vec3(0.,-5.,0.), vec4(1.0, 0., 0., 0.));
     ground.y = 0.;
-    res = smin(res, ground, 3.);
+    res = smin(ground, res, 3.);
 
-    vec3 boxPosition = vec3(0., 6. + 3. * cos(time * 0.01), 15.);
-    if ( res.x > boundingBox(p, boxPosition, vec3(3., 7.0, 3.)) )
+    vec3 boxPosition = vec3(0., 6. + 3. * cos(time * 0.01), 0.);
+    if ( res.x > boundingBox(p, boxPosition, vec3(3., 4.0, 3.)) )
     {
-        float scale = mix(1., 2., smoothstep(2., 7., p.y));
+        float scale = 1.0 + smoothstep(1., 7., p.y);
         vec3 size = vec3(2., 3. , 2.);
         p.xz *= scale;
         boxPosition.xz *= scale;
-        vec2 movingBox = roundBox(p, size, .2, boxPosition, vec3(0.), vec4(1., 0., 0., 0.)) / scale;
-        res = smin(res, movingBox, 1.);
-        res.y = 0.;
+        vec2 movingBox = roundBox(p, size, .1, boxPosition, vec3(0.), vec4(1.0, 0., 1., time * 0.01) + p.z * 0.1) / scale;
         p.xz /= scale;
+        movingBox.y = 0.1;
+        res = smin(res, movingBox * 0.6, 0.0);
     }
-
-    // test terrain
-    // vec3 terrainPosition = vec3(0., 1., - 15.);
-    // if ( res.x > boundingBox(p, terrainPosition, vec3(4., 2., 4.)))
-    // {
-    //     vec3 size = vec3(3., 1., 3.);
-    //     vec3 relPos = p - terrainPosition - size;
-    //     float scale = mix(1., 3., smoothstep(-6., 0., 6.*cos(2.*relPos.z)));
-    //     p.y *= scale;
-    //     terrainPosition.y *= scale;
-    //     vec2 terrainBox = roundBox(p, size, 0., terrainPosition, vec3(0.), vec4(1., 0., 0., 0.)) / scale;
-    //     terrainBox.y = 0.05;
-    //     res = smin(res, terrainBox, 1.);
-    //     p.y /= scale;
-    // }
-    
-    // box.y = 0.0;
-
-    // unionize everything to get one result
-    // vec2 result = unionAB(orbital, ground);
-    // result = unionAB(result, box);
-    // result = smin(result, box, 1.0);
 
     return res;
 }
@@ -189,31 +165,39 @@ vec3 rayMarch(vec3 pos, vec3 dir, bool light) {
 	vec3 currentPosition;
     float dx = 0.;
     float closestPoint = 1.;
-    vec2 temp = vec2(1000000.0,0.); // intentionally initialize to huge number
-    // #pragma unroll_loop_start
+    vec2 temp = vec2(1000000.0,0.); // intentionally initialize to huge number#
+    vec2 temp2 = temp;
+    float larger = 1.0;
+    bool steppedBack = false;
+    #pragma unroll_loop_start
 	for( int i = 0; i < NUM_STEPS; i++) {
  
-        //update position along path
+        // update position along path
         currentPosition = pos + dir * dx;
- 
-        //gets the shortest distance to the scene
+
+        // gets the shortest distance to the scene
 		temp = sdf( currentPosition, true);
+        dx += temp.x * larger;
+
+        // if( abs(temp.x) - abs(temp2.x) > dx)
+        //     steppedBack = true;
  
-        //break the loop if the distance was too small
-        //this means that we are close enough to the surface
+        // break the loop if the distance was too small
+        // this means that we are close enough to the surface
 		if( abs(temp.x) < MIN_DIST || temp.x > FAR_DIST) break;
  
-		//increment the step along the ray path
-		dx += temp.x;
+		// increment the step along the ray path
+        temp2 = temp;
+		// dx += temp.x * larger;
 	}
-    // #pragma unroll_loop_end
+    #pragma unroll_loop_end
     return currentPosition;
 }
 
 float getLight(vec3 position) {
     vec3 normal = calcNormal(position);
-    vec3 dir = normalize(lightPosition - position);
-    return clamp(dot(normal, dir), 0., 1.);
+    vec3 dir = normalize(lightPosition - position) * 1.0;
+    return max(dot(normal, dir), 0.);
 }
 
 // Sexy shadows by iq + improvement by sebastian aaltonen
@@ -225,44 +209,49 @@ float getShadows(vec3 origin) {
 
     vec3 pos = origin + calcNormal(origin)*MIN_DIST*2.;
     vec3 dir = normalize(lightPosition - origin);
-    float dx = MIN_DIST*1.;
+    float dx = MIN_DIST;
 
     // #pragma unroll_loop_start
     for (int i = 0; i < SHADOW_STEPS; ++i) {
         dist = sdf(pos + dx * dir, true);
 
-        if (abs(dist.x) < MIN_DIST) 
+        if (dist.x < MIN_DIST) 
             return 0.0;
         else
         if (dx < lightDist) {
             float y = dist.x*dist.x / (2. * ph);
             float d = sqrt(dist.x*dist.x - y*y);
             result = min(result, SHADOW_SOFTNESS * d / max(0., dx - y));
-            // result = min(result, SHADOW_SOFTNESS * dist.x / dx);
-            // ph = dist.x;
+            // result = min(result, SHADOW_SOFTNESS * abs(dist.x) / dx);
+            ph = abs(dist.x);
         }
         else
+        // if past an object and beyond light
         if (length(pos - origin) > lightDist) 
             return result;
             
-        dx+=dist.x;
+        dx+=abs(dist.x);
     }
-    
-    // #pragma unroll_loop_end
+    #pragma unroll_loop_end
+
     return result;
 }
 
 vec3 getMaterial(vec2 a, vec3 normal, vec3 position) {
-    if (a.y < 0.1)
-    //         return vec3((cos(position.x * PI / 2.) + cos(position.z * PI / 2.)) * (cos(position.x * PI / 2.) + cos(position.z * PI / 2.)) / 3.0);
-        return mix(vec3(0.5), normal, 10.*a.y);
-    if (a.y == 0.1) {
-        return normal;
+    vec3 col;
+    if (a.y == 0.0)
+    {
+        col = vec3((cos(position.x * PI / 2.) + cos(position.z * PI / 2.)) * (cos(position.x * PI / 2.) + cos(position.z * PI / 2.)) / 3.0) * 0.5;// * max(0.5, getShadows(position));
     }
-    if (a.y == 0.2) {
-        return normal;
+    else if (a.y <= 0.1)
+    {
+        vec3 ground = vec3((cos(position.x * PI / 2.) + cos(position.z * PI / 2.)) * (cos(position.x * PI / 2.) + cos(position.z * PI / 2.)) / 3.0) * 0.5;
+        col = mix(ground, abs(normal), 15.*a.y) ;
+    }   
+    else if (a.y == 0.2) {
+        col = normal;
     }
-    return vec3(1.);
+    return col * getLight(position) * max(0.35, getShadows(position));
 }
 
 void main( void ) {
@@ -270,7 +259,6 @@ void main( void ) {
     // get screen uv's
 	vec2 uv = ( gl_FragCoord.xy / resolution.xy ) * 2.0 - 1.0;
 	uv.x *= resolution.x / resolution.y;
- 
  
     // set camera position and direction
 
@@ -288,15 +276,18 @@ void main( void ) {
     // Assign material
     vec3 rgb = getMaterial(val, normal, final);
 
-    rgb *= getLight(final);
-    rgb *= getShadows(final);
-
+    // rgb *= getLight(final);
+    // rgb *= getShadows(final);
+    
     // Fix bugs and do background
     if (val.x > FAR_DIST)
     {
         vec3 col = vec3(dir.y*0.8+0.5, dir.y*0.8+0.5, 1.);
         rgb = col;
     }
+
+    rgb = clamp(rgb, 0., 1.);
+
 	gl_FragColor = vec4(rgb, 1.);
 }
 `;

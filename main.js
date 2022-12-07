@@ -9,6 +9,8 @@ const scene = new t3.Scene();
 const camera = new t3.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 
 const renderer = new t3.WebGLRenderer( {
+  minFilter: t3.LinearFilter,
+  magFilter: t3.LinearFilter,
   canvas: document.querySelector('#bg'),
 })
 
@@ -21,8 +23,9 @@ camera.position.setX(20);
 camera.position.setY(10);
 
 function createMesh() {
-  const geometry = new t3.PlaneGeometry(2, 2);
-  const material = new t3.ShaderMaterial({
+  const geometry = new t3.PlaneBufferGeometry(2, 2);
+
+  var material = new t3.ShaderMaterial({
     fragmentShader: fragment,
     vertexShader: vertex,
     uniforms:{
@@ -32,6 +35,7 @@ function createMesh() {
       lightPosition:{type:"vec3", value: new Vector3(5., 5., 5.)}
             }
     , side: t3.DoubleSide});
+  material.dithering = true;
   const mesh = new t3.Mesh(geometry, material);
   return mesh;
 }
@@ -42,6 +46,10 @@ scene.add(plane);
 
 camera.matrixAutoUpdate = true;
 const fps = 60;
+
+const texture = new t3.TextureLoader().load('3dtexture.bin');
+console.log(texture.internalFormat);
+
 function animate() {
   controls.update();
 
